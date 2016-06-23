@@ -17,5 +17,5 @@ ADD prometheus.yaml.tmpl /opt/prometheus/conf/prometheus.yaml.tmpl
 ENTRYPOINT ["/usr/local/bin/docker_run.sh"]
 
 EXPOSE 9090
-EXPOSE 9093
+#EXPOSE 9093
 
