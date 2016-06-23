@@ -1,0 +1,19 @@
+{
+	"ImportPath": "github.com/QubitProducts/prometheus_mesos_sd",
+	"GoVersion": "go1.6",
+	"GodepVersion": "v74",
+	"Deps": [
+		{
+			"ImportPath": "github.com/andygrunwald/megos",
+			"Rev": "99df47e6cf8edf6f04e4e959fc6a092432ea46f4"
+		},
+		{
+			"ImportPath": "github.com/golang/glog",
+			"Rev": "23def4e6c14b4da8ac2ed8007337bc5eb5007998"
+		},
+		{
+			"ImportPath": "golang.org/x/net/context",
+			"Rev": "35ec611a141ee705590b9eb64d673f9e6dfeb1ac"
+		}
+	]
+}
