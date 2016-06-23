@@ -160,7 +160,7 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 			for oldpid, slot := range smap {
 				var found bool
 				for _, news := range newss {
-					if news.PID == oldpid {
+					if news.PID == oldpid && news.Active {
 						expaddr := fmt.Sprintf("localhost:%d", slot.port)
 						targets = append(targets, expaddr)
 						found = true
@@ -172,6 +172,7 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 					slot.cf()
 					slot.cf = nil
 					spool.Put(slot)
+					delete(smap, oldpid)
 				}
 			}
 
@@ -179,7 +180,7 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 			for _, news := range newss {
 				var addr string
 				var err error
-				if _, ok := smap[news.PID]; !ok {
+				if _, ok := smap[news.PID]; !ok && news.Active {
 					if slot, ok := spool.Get().(*sslot); !ok || slot == nil {
 						glog.Error("Could not get slave slot")
 					} else {
