@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -40,6 +41,8 @@ var (
 	sbase = flag.Int("sbase", 10001, "Port for the slave exporters to run on, all ports above this port will be attempted")
 )
 
+var cn string
+
 func main() {
 	flag.Parse()
 
@@ -52,32 +55,60 @@ func main() {
 	wg := &sync.WaitGroup{}
 	ctx := context.Background()
 
+	// Cluster name is only on the master, we'll grab it now
+	// to pass to slave workers
+	mesos := megos.NewClient(ms)
+	leader, err := mesos.DetermineLeader()
+	if err != nil {
+		log.Fatalf("Can't get initial cluster leader, ", err.Error())
+	}
+
+	_, state, err := addrFromPID(mesos, leader.String())
+	if err != nil {
+		log.Fatalf("Can't get initial cluster leader, ", err.Error())
+	}
+
+	cn = state.Cluster
+
 	wg.Add(2)
-	mw := make(chan []string)
+	mw := make(chan []target)
 	go configUpdater(ctx, *mfile, "mesos-master", mw, wg)
 	go masterWatcher(ctx, mw, wg, ms)
 
 	wg.Add(2)
-	sw := make(chan []string)
+	sw := make(chan []target)
 	go configUpdater(ctx, *sfile, "mesos-slave", sw, wg)
 	go slaveWatcher(ctx, sw, wg, ms)
 
 	wg.Wait()
 }
 
-func configUpdater(ctx context.Context, fn, jobn string, targets chan []string, wg *sync.WaitGroup) {
-	oldtargets := []string{}
+type target struct {
+	local    string
+	remAddr  string
+	remState *megos.State
+	remAttrs map[string]interface{}
+}
+
+type byURL []target
+
+func (s byURL) Len() int           { return len(s) }
+func (s byURL) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s byURL) Less(i, j int) bool { return s[i].local < s[j].local }
+
+func configUpdater(ctx context.Context, fn, jobn string, targets chan []target, wg *sync.WaitGroup) {
+	oldtargets := []target{}
 	for {
 		select {
 		case <-ctx.Done():
 		case newts := <-targets:
-			sort.Strings(newts)
+			sort.Sort(byURL(newts))
 			same := true
 			if len(oldtargets) != len(newts) {
 				same = false
 			} else {
 				for i := range oldtargets {
-					if oldtargets[i] != newts[i] {
+					if oldtargets[i].remAddr != newts[i].remAddr {
 						same = false
 					}
 				}
@@ -93,7 +124,7 @@ func configUpdater(ctx context.Context, fn, jobn string, targets chan []string, 
 	wg.Done()
 }
 
-func writeConfig(fn, jobn string, targets []string) {
+func writeConfig(fn, jobn string, targets []target) {
 	type promTargetGroup struct {
 		Targets []string          `json:"targets"`
 		Labels  map[string]string `json:"labels",omitempty`
@@ -105,23 +136,53 @@ func writeConfig(fn, jobn string, targets []string) {
 		return
 	}
 
+	tgs := []promTargetGroup{}
+	for _, t := range targets {
+		url, _ := url.Parse(t.remAddr)
+		port := "80"
+		if ss := strings.Split(url.Host, ":"); len(ss) > 1 {
+			port = ss[len(ss)-1]
+		}
+
+		glog.Infof("%#v", t.remState.Hostname)
+		attrs := map[string]string{
+			"job":                jobn,
+			"instance":           t.remState.Hostname + ":" + port,
+			"mesos_cluster_name": cn,
+		}
+		for k, v := range t.remAttrs {
+			if s, ok := v.(string); ok {
+				attrs["mesos_"+strings.ToLower(k)] = s
+			}
+		}
+		tgs = append(tgs,
+			promTargetGroup{
+				[]string{t.local},
+				attrs,
+			})
+	}
+
 	enc := json.NewEncoder(f)
-	enc.Encode([]promTargetGroup{{
-		targets,
-		map[string]string{"job": jobn},
-	}})
+	enc.Encode(tgs)
 	f.Close()
 }
 
-func addrFromPID(mesos *megos.Client, p string) (string, error) {
-	if pid, err := mesos.ParsePidInformation(p); err != nil {
-		return "", err
-	} else {
-		return fmt.Sprintf("http://%s:%d", pid.Host, pid.Port), nil
+func addrFromPID(mesos *megos.Client, PID string) (string, *megos.State, error) {
+	var pid *megos.Pid
+	var err error
+	if pid, err = mesos.ParsePidInformation(PID); err != nil {
+		return "", nil, err
 	}
+
+	state, err := mesos.GetStateFromPid(pid)
+	if err != nil {
+		return "", nil, fmt.Errorf("Could not get state, ", err.Error())
+	}
+
+	return fmt.Sprintf("http://%s:%d", pid.Host, pid.Port), state, nil
 }
 
-func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup, ms []*url.URL) {
+func slaveWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup, ms []*url.URL) {
 	glog.Info("Running Slave Watcher")
 	type sslot struct {
 		port int
@@ -148,21 +209,29 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 				}
 			}
 		case <-time.After(time.Second * 5):
-			state, err := mesos.GetSlavesFromCluster()
+			cstate, err := mesos.GetSlavesFromCluster()
 			if err != nil {
 				glog.Error("Could not get list of slaves, ", err.Error())
 				continue
 			}
-			newss := state.Slaves
+			newss := cstate.Slaves
 
-			targets := []string{}
+			targets := []target{}
 			// Kill old watchers
 			for oldpid, slot := range smap {
 				var found bool
 				for _, news := range newss {
 					if news.PID == oldpid && news.Active {
+						addr := ""
+
+						addr, state, err := addrFromPID(mesos, news.PID)
+						if err != nil {
+							glog.Error("Could not parse slave state, %s ", err.Error())
+							continue
+						}
+
 						expaddr := fmt.Sprintf("localhost:%d", slot.port)
-						targets = append(targets, expaddr)
+						targets = append(targets, target{local: expaddr, remAddr: addr, remState: state, remAttrs: news.Attributes})
 						found = true
 						break
 					}
@@ -178,7 +247,6 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 
 			// Start new watchers
 			for _, news := range newss {
-				var addr string
 				var err error
 				if _, ok := smap[news.PID]; !ok && news.Active {
 					if slot, ok := spool.Get().(*sslot); !ok || slot == nil {
@@ -188,12 +256,14 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 						slot.cf = scf
 						smap[news.PID] = slot
 
-						if addr, err = addrFromPID(mesos, news.PID); err != nil {
+						var addr string
+						var state *megos.State
+						if addr, state, err = addrFromPID(mesos, news.PID); err != nil {
 							glog.Errorf("Could no parse pid %s\n", news.PID)
 							continue
 						}
 						expaddr := fmt.Sprintf("localhost:%d", slot.port)
-						targets = append(targets, expaddr)
+						targets = append(targets, target{local: expaddr, remAddr: addr, remState: state, remAttrs: news.Attributes})
 						args := []string{"-addr", expaddr, "-slave", addr}
 						go processWatcher(sctx, *ecmd, args...)
 					}
@@ -206,7 +276,7 @@ func slaveWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup,
 	wg.Done()
 }
 
-func masterWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup, ms []*url.URL) {
+func masterWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup, ms []*url.URL) {
 	glog.Info("Running Master Watcher")
 
 	mesos := megos.NewClient(ms)
@@ -225,12 +295,7 @@ func masterWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup
 			}
 		case <-time.After(time.Second * 5):
 			leader, err := mesos.DetermineLeader()
-			if err != nil {
-				glog.Error("Could not get leader, ", err.Error())
-				continue
-			}
-
-			addr, err := addrFromPID(mesos, leader.String())
+			addr, state, err := addrFromPID(mesos, leader.String())
 			if err != nil {
 				glog.Error("Could not parse leader PID %#v, %s ", leader, err.Error())
 				continue
@@ -249,7 +314,11 @@ func masterWatcher(ctx context.Context, writer chan []string, wg *sync.WaitGroup
 
 				oldleaderpid = leader.String()
 
-				writer <- []string{expaddr}
+				writer <- []target{{
+					local:    expaddr,
+					remAddr:  addr,
+					remState: state,
+				}}
 			}
 		}
 	}
