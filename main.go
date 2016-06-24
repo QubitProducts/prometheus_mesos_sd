@@ -226,7 +226,7 @@ func slaveWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup,
 
 						addr, state, err := addrFromPID(mesos, news.PID)
 						if err != nil {
-							glog.Error("Could not parse slave state, %s ", err.Error())
+							glog.Errorf("Could not parse slave state, %s ", err.Error())
 							continue
 						}
 
@@ -259,7 +259,7 @@ func slaveWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup,
 						var addr string
 						var state *megos.State
 						if addr, state, err = addrFromPID(mesos, news.PID); err != nil {
-							glog.Errorf("Could no parse pid %s\n", news.PID)
+							glog.Errorf("Could not parse pid %s, %s\n", news.PID, err.Error())
 							continue
 						}
 						expaddr := fmt.Sprintf("localhost:%d", slot.port)
