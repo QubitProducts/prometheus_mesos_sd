@@ -176,7 +176,7 @@ func addrFromPID(mesos *megos.Client, PID string) (string, *megos.State, error) 
 
 	state, err := mesos.GetStateFromPid(pid)
 	if err != nil {
-		return "", nil, fmt.Errorf("Could not get state, ", err.Error())
+		return "", nil, fmt.Errorf("Could not get state, %s", err.Error())
 	}
 
 	return fmt.Sprintf("http://%s:%d", pid.Host, pid.Port), state, nil
