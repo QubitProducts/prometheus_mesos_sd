@@ -9,7 +9,6 @@ global:
 # A scrape configuration containing exactly one endpoint to scrape:
 # Here it's Prometheus itself.
 scrape_configs:
-  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
   - job_name: 'marathon'
     scrape_interval: 5s
     marathon_sd_configs:
@@ -21,7 +20,16 @@ scrape_configs:
       regex:         '(.*)'
       replacement:   '${1}'
       target_label:  'job'
+    - source_labels: ['__meta_marathon_image']
+      regex:         '(.*)'
+      replacement:   '${1}'
+      target_label:  'docker_image'
+    - source_labels: ['__meta_marathon_task']
+      regex:         '(.*)'
+      replacement:   '${1}'
+      target_label:  'id'
 
   - job_name: 'mesos-default'
     file_sd_configs:
       - files: ['/opt/prometheus/conf/mesos-groups/*.json']
+
