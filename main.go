@@ -72,12 +72,12 @@ func main() {
 
 	wg.Add(2)
 	mw := make(chan []target)
-	go configUpdater(ctx, *mfile, "mesos-master", mw, wg)
+	go configUpdater(ctx, *mfile, "mesos-master-exprter", mw, wg)
 	go masterWatcher(ctx, mw, wg, ms)
 
 	wg.Add(2)
 	sw := make(chan []target)
-	go configUpdater(ctx, *sfile, "mesos-slave", sw, wg)
+	go configUpdater(ctx, *sfile, "mesos-slave-exporter", sw, wg)
 	go slaveWatcher(ctx, sw, wg, ms)
 
 	wg.Wait()

@@ -6,6 +6,10 @@ global:
   external_labels:
     monitor: 'mesos-monitor'
 
+rule_files:
+  - /opt/prometheus/conf/rules/*.rules
+  - /opt/prometheus/conf/alerts/*.rules
+
 # A scrape configuration containing exactly one endpoint to scrape:
 # Here it's Prometheus itself.
 scrape_configs:
