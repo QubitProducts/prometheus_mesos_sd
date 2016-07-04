@@ -20,6 +20,11 @@ scrape_configs:
       - MARATHON_URL
 
     relabel_configs:
+    # Drop anything with a promexclude label
+    - source_labels: ['__meta_marathon_app_label_promexclude']
+      regex:         '(.+)'
+      action:        drop
+
     - source_labels: ['__meta_marathon_app']
       regex:         '(.*)'
       replacement:   '${1}'
