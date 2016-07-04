@@ -39,6 +39,9 @@ var (
 	sfile = flag.String("file.slaves", "mesos-slaves.json", "File to write mesos-slaves info to.")
 	mport = flag.Int("mport", 10000, "Port for the master exporter to run on")
 	sbase = flag.Int("sbase", 10001, "Port for the slave exporters to run on, all ports above this port will be attempted")
+
+	cvsrPort = flag.Int("cadvisor.port", 4194, "Port for cadvisor on the nodes")
+	ndxpPort = flag.Int("nodeexporter.port", 9100, "Port for node_exporter on the nodes")
 )
 
 var cn string
@@ -137,6 +140,7 @@ func writeConfig(fn, jobn string, targets []target) {
 	}
 
 	tgs := []promTargetGroup{}
+	tgsHostDone := map[string]bool{}
 	for _, t := range targets {
 		url, _ := url.Parse(t.remAddr)
 		port := "80"
@@ -144,7 +148,7 @@ func writeConfig(fn, jobn string, targets []target) {
 			port = ss[len(ss)-1]
 		}
 
-		glog.Infof("%#v", t.remState.Hostname)
+		// Add the specific mesos service target
 		attrs := map[string]string{
 			"job":                jobn,
 			"instance":           t.remState.Hostname + ":" + port,
@@ -160,6 +164,33 @@ func writeConfig(fn, jobn string, targets []target) {
 				[]string{t.local},
 				attrs,
 			})
+
+		if _, ok := tgsHostDone[t.remState.Hostname]; ok {
+			// already added target for this host
+			continue
+		}
+
+		// Add cadvisor and node_exporter
+		delete(attrs, "instance")
+
+		if *cvsrPort != 0 {
+			tgs = append(tgs,
+				promTargetGroup{
+					[]string{fmt.Sprintf("%s:%d", t.remState.Hostname, *cvsrPort)},
+					attrs,
+				},
+			)
+		}
+		if *ndxpPort != 0 {
+			tgs = append(tgs,
+				promTargetGroup{
+					[]string{fmt.Sprintf("%s:%d", t.remState.Hostname, *ndxpPort)},
+					attrs,
+				},
+			)
+		}
+
+		tgsHostDone[t.remState.Hostname] = true
 	}
 
 	enc := json.NewEncoder(f)
