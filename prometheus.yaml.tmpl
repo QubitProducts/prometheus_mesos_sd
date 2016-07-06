@@ -28,7 +28,7 @@ scrape_configs:
     - source_labels: ['__meta_marathon_app']
       regex:         '(.*)'
       replacement:   '${1}'
-      target_label:  'job'
+      target_label:  'app'
     - source_labels: ['__meta_marathon_image']
       regex:         '(.*)'
       replacement:   '${1}'
@@ -37,6 +37,8 @@ scrape_configs:
       regex:         '(.*)'
       replacement:   '${1}'
       target_label:  'id'
+    - action:        labelmap
+      regex:         '__meta_marathon_app_label_(.+)'
 
   - job_name: 'mesos-default'
     file_sd_configs:
