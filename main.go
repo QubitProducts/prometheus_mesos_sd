@@ -174,18 +174,28 @@ func writeConfig(fn, jobn string, targets []target) {
 		delete(attrs, "instance")
 
 		if *cvsrPort != 0 {
+			cvsrAttrs := map[string]string{}
+			for k, v := range attrs {
+				cvsrAttrs[k] = v
+			}
+			cvsrAttrs["job"] = "cadvisor"
 			tgs = append(tgs,
 				promTargetGroup{
 					[]string{fmt.Sprintf("%s:%d", t.remState.Hostname, *cvsrPort)},
-					attrs,
+					cvsrAttrs,
 				},
 			)
 		}
 		if *ndxpPort != 0 {
+			nodeAttrs := map[string]string{}
+			for k, v := range attrs {
+				nodeAttrs[k] = v
+			}
+			nodeAttrs["job"] = "node"
 			tgs = append(tgs,
 				promTargetGroup{
 					[]string{fmt.Sprintf("%s:%d", t.remState.Hostname, *ndxpPort)},
-					attrs,
+					nodeAttrs,
 				},
 			)
 		}
