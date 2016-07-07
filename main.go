@@ -21,7 +21,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -34,11 +33,8 @@ import (
 )
 
 var (
-	ecmd  = flag.String("mesos-exporter", "mesos-exporter", "Binary for the mesos-exporter.")
 	mfile = flag.String("file.master", "mesos-master.json", "File to write mesos-master info to.")
 	sfile = flag.String("file.slaves", "mesos-slaves.json", "File to write mesos-slaves info to.")
-	mport = flag.Int("mport", 10000, "Port for the master exporter to run on")
-	sbase = flag.Int("sbase", 10001, "Port for the slave exporters to run on, all ports above this port will be attempted")
 
 	cvsrPort = flag.Int("cadvisor.port", 4194, "Port for cadvisor on the nodes")
 	ndxpPort = flag.Int("nodeexporter.port", 9100, "Port for node_exporter on the nodes")
@@ -87,8 +83,9 @@ func main() {
 }
 
 type target struct {
-	local    string
+	pid      string
 	remAddr  string
+	remPort  string
 	remState *megos.State
 	remAttrs map[string]interface{}
 }
@@ -97,7 +94,7 @@ type byURL []target
 
 func (s byURL) Len() int           { return len(s) }
 func (s byURL) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s byURL) Less(i, j int) bool { return s[i].local < s[j].local }
+func (s byURL) Less(i, j int) bool { return s[i].pid < s[j].pid }
 
 func configUpdater(ctx context.Context, fn, jobn string, targets chan []target, wg *sync.WaitGroup) {
 	oldtargets := []target{}
@@ -142,16 +139,9 @@ func writeConfig(fn, jobn string, targets []target) {
 	tgs := []promTargetGroup{}
 	tgsHostDone := map[string]bool{}
 	for _, t := range targets {
-		url, _ := url.Parse(t.remAddr)
-		port := "80"
-		if ss := strings.Split(url.Host, ":"); len(ss) > 1 {
-			port = ss[len(ss)-1]
-		}
-
 		// Add the specific mesos service target
 		attrs := map[string]string{
 			"job":                jobn,
-			"instance":           t.remState.Hostname + ":" + port,
 			"mesos_cluster_name": cn,
 		}
 		for k, v := range t.remAttrs {
@@ -161,7 +151,7 @@ func writeConfig(fn, jobn string, targets []target) {
 		}
 		tgs = append(tgs,
 			promTargetGroup{
-				[]string{t.local},
+				[]string{t.remState.Hostname + ":" + t.remPort},
 				attrs,
 			})
 
@@ -225,30 +215,11 @@ func addrFromPID(mesos *megos.Client, PID string) (string, *megos.State, error) 
 
 func slaveWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup, ms []*url.URL) {
 	glog.Info("Running Slave Watcher")
-	type sslot struct {
-		port int
-		cf   context.CancelFunc
-	}
-	smap := map[string]*sslot{}
-	highport := *sbase - 1
 
-	spool := &sync.Pool{
-		New: func() interface{} {
-			highport++
-			return &sslot{port: highport}
-		},
-	}
-
+	pidmap := map[string]bool{}
 	mesos := megos.NewClient(ms)
 	for {
 		select {
-		case <-ctx.Done():
-			// Stop any running exporters
-			for _, s := range smap {
-				if s.cf != nil {
-					s.cf()
-				}
-			}
 		case <-time.After(time.Second * 5):
 			cstate, err := mesos.GetSlavesFromCluster()
 			if err != nil {
@@ -259,7 +230,7 @@ func slaveWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup,
 
 			targets := []target{}
 			// Kill old watchers
-			for oldpid, slot := range smap {
+			for oldpid, _ := range pidmap {
 				var found bool
 				for _, news := range newss {
 					if news.PID == oldpid && news.Active {
@@ -271,50 +242,35 @@ func slaveWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup,
 							continue
 						}
 
-						expaddr := fmt.Sprintf("localhost:%d", slot.port)
-						targets = append(targets, target{local: expaddr, remAddr: addr, remState: state, remAttrs: news.Attributes})
+						targets = append(targets, target{pid: news.PID, remAddr: addr, remPort: "9110", remState: state, remAttrs: news.Attributes})
 						found = true
 						break
 					}
 				}
 				if !found {
 					glog.Infof("Slave %s has left\n", oldpid)
-					slot.cf()
-					slot.cf = nil
-					spool.Put(slot)
-					delete(smap, oldpid)
+					delete(pidmap, oldpid)
 				}
 			}
 
 			// Start new watchers
 			for _, news := range newss {
 				var err error
-				if _, ok := smap[news.PID]; !ok && news.Active {
-					if slot, ok := spool.Get().(*sslot); !ok || slot == nil {
-						glog.Error("Could not get slave slot")
-					} else {
-						sctx, scf := context.WithCancel(ctx)
-						slot.cf = scf
-						smap[news.PID] = slot
+				if _, ok := pidmap[news.PID]; !ok && news.Active {
+					pidmap[news.PID] = true
 
-						var addr string
-						var state *megos.State
-						if addr, state, err = addrFromPID(mesos, news.PID); err != nil {
-							glog.Errorf("Could not parse pid %s, %s\n", news.PID, err.Error())
-							continue
-						}
-						expaddr := fmt.Sprintf("localhost:%d", slot.port)
-						targets = append(targets, target{local: expaddr, remAddr: addr, remState: state, remAttrs: news.Attributes})
-						args := []string{"-addr", expaddr, "-slave", addr}
-						go processWatcher(sctx, *ecmd, args...)
+					var addr string
+					var state *megos.State
+					if addr, state, err = addrFromPID(mesos, news.PID); err != nil {
+						glog.Errorf("Could not parse pid %s, %s\n", news.PID, err.Error())
+						continue
 					}
+					targets = append(targets, target{pid: news.PID, remAddr: addr, remPort: "9110", remState: state, remAttrs: news.Attributes})
 				}
 			}
-
 			writer <- targets
 		}
 	}
-	wg.Done()
 }
 
 func masterWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup, ms []*url.URL) {
@@ -322,18 +278,9 @@ func masterWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup
 
 	mesos := megos.NewClient(ms)
 	oldleaderpid := ""
-	var mcf context.CancelFunc
-	var mctx context.Context
 
 	for {
-
 		select {
-		case <-ctx.Done():
-			// Stop any running exporters
-			if mcf != nil {
-				mcf()
-				mcf = nil
-			}
 		case <-time.After(time.Second * 5):
 			leader, err := mesos.DetermineLeader()
 			addr, state, err := addrFromPID(mesos, leader.String())
@@ -343,47 +290,15 @@ func masterWatcher(ctx context.Context, writer chan []target, wg *sync.WaitGroup
 			}
 
 			if leader.String() != oldleaderpid {
-				if mcf != nil {
-					mcf()
-					mcf = nil
-				}
-				mctx, mcf = context.WithCancel(ctx)
-
-				expaddr := fmt.Sprintf("localhost:%d", *mport)
-				args := []string{"-addr", expaddr, "-master", addr}
-				go processWatcher(mctx, *ecmd, args...)
-
 				oldleaderpid = leader.String()
 
 				writer <- []target{{
-					local:    expaddr,
 					remAddr:  addr,
+					remPort:  "9105",
 					remState: state,
 				}}
 			}
 		}
 	}
 	wg.Done()
-}
-
-// Loops restarting a process
-func processWatcher(ctx context.Context, name string, args ...string) {
-	for {
-		glog.Infof("Running %s %s\n", *ecmd, strings.Join(args, " "))
-		fin := make(chan struct{})
-
-		cmd := exec.Command(name, args...)
-		go func() {
-			if out, err := cmd.CombinedOutput(); err != nil {
-				glog.Error("Failed to run ", string(out), err)
-			}
-			close(fin)
-		}()
-		select {
-		case <-fin:
-		case <-ctx.Done():
-			cmd.Process.Kill()
-			return
-		}
-	}
 }
