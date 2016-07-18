@@ -14,11 +14,7 @@ RUN mkdir -p /opt/prometheus/conf/rules
 RUN mkdir -p /opt/prometheus/conf/alerts
 RUN mkdir -p /opt/prometheus/conf/consoles/libs
 ADD prometheus.yaml.tmpl /opt/prometheus/conf/prometheus.yaml.tmpl
-#ADD alertmanager.yaml /opt/prometheus/conf/alertmanager.yaml
-
 
 ENTRYPOINT ["/usr/local/bin/docker_run.sh"]
 
 EXPOSE 9090
-#EXPOSE 9093
-

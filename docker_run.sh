@@ -5,7 +5,7 @@ env
 PROMCONF=/opt/prometheus/conf
 MARATHON_URL=$1
 
-if [ ! -z "$MESOS_STORAGE" && ! -z "$MESOS_SANDBOX"]; then
+if [ ! -z "$MESOS_STORAGE" -a ! -z "$MESOS_SANDBOX" ]; then
   PROMFLAGS="$PROMFLAGS -storage.local.path	$MESOS_SANDBOX/$MESOS_STORAGE"
 fi
 
