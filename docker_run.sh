@@ -10,5 +10,11 @@ if [ ! -z "$MESOS_STORAGE" -a ! -z "$MESOS_SANDBOX" ]; then
 fi
 
 cat $PROMCONF/prometheus.yaml.tmpl | sed -e "s#MARATHON_URL#${MARATHON_URL}#g" > $PROMCONF/prometheus.yaml
+if [ -d $PROMCONF/conf.d ]; then
+  for F in $(ls $PROMCONF/conf.d/*.yaml); do
+    cat $F >> $PROMCONF/prometheus.yaml
+  done
+fi
+
 /go/bin/prometheus_mesos_sd -logtostderr -file.master $PROMCONF/mesos-groups/master.json -file.slaves $PROMCONF/mesos-groups/slaves.json $2 &
 /go/bin/prometheus -config.file $PROMCONF/prometheus.yaml -web.console.templates /opt/prometheus/conf/consoles -web.console.libraries /opt/prometheus/conf/cnosoles/lib $PROMFLAGS
