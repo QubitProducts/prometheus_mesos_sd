@@ -51,10 +51,13 @@ scrape_configs:
     - source_labels: ['id']
       regex:         '(.*)'
       replacement:   ''
+      target_label:  'id'
     - source_labels: ['framework_id']
       regex:         '(.*)'
       replacement:   ''
+      target_label:  'framework_id'
     - source_labels: ['source']
       regex:         '(.*)'
       replacement:   ''
+      target_label:  'source'
 
