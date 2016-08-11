@@ -26,9 +26,9 @@ scrape_configs:
       action:        drop
 
     - source_labels: ['__meta_marathon_app']
-      regex:         '(.*)'
+      regex:         '/?(.*)'
       replacement:   '${1}'
-      target_label:  'app'
+      target_label:  'job'
     - source_labels: ['__meta_marathon_image']
       regex:         '(.*)'
       replacement:   '${1}'
@@ -36,11 +36,25 @@ scrape_configs:
     - source_labels: ['__meta_marathon_task']
       regex:         '(.*)'
       replacement:   '${1}'
-      target_label:  'id'
+      target_label:  'mesos_task_id'
     - action:        labelmap
       regex:         '__meta_marathon_app_label_(.+)'
 
   - job_name: 'mesos-default'
     file_sd_configs:
       - files: ['/opt/prometheus/conf/mesos-groups/*.json']
+    metric_relabel_configs:
+    - source_labels: ['id']
+      regex:         '(.*)'
+      replacement:   '${1}'
+      target_label:  'mesos_task_id'
+    - source_labels: ['id']
+      regex:         '(.*)'
+      replacement:   ''
+    - source_labels: ['framework_id']
+      regex:         '(.*)'
+      replacement:   ''
+    - source_labels: ['source']
+      regex:         '(.*)'
+      replacement:   ''
 
