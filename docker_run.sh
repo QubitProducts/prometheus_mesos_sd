@@ -21,4 +21,4 @@ if [ -d $PROMCONF/conf.d ]; then
 fi
 
 /go/bin/prometheus_mesos_sd -logtostderr -file.master $PROMCONF/mesos-groups/master.json -file.slaves $PROMCONF/mesos-groups/slaves.json $2 &
-/go/bin/prometheus -config.file $PROMCONF/prometheus.yaml -web.console.templates /opt/prometheus/conf/consoles -web.console.libraries /opt/prometheus/conf/cnosoles/lib $PROMFLAGS
+/go/bin/prometheus -config.file $PROMCONF/prometheus.yaml -web.console.templates /opt/prometheus/conf/consoles -web.console.libraries /opt/prometheus/conf/cnosole_libraries $PROMFLAGS

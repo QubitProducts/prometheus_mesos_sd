@@ -1,10 +1,10 @@
 FROM golang
 
-ENV PROM_VERSION 1.0.1
-ENV PROM_SHA256 2ef4f7e416c6fdc07396be9a72f69670733a0c6f72060c8bb42d6ff3410eae96
+ENV PROM_VERSION 1.1.2
+ENV PROM_SHA256 dc97178c46ca04a1a1306037979d9157f758163915c78bbe07eb3d234e254867
 
-ENV AM_VERSION 0.3.0
-ENV AM_SHA256 ee5ce1aa3e6d4602e112ae9fe7dc3ddf8f80bea0d96dc74861b90d947a3d9c32
+ENV AM_VERSION 0.4.2
+ENV AM_SHA256 8d04e3dc9955a0a3897d126c996b921cfd1dc80ff6ff982936ce8f703baa2eb8
 
 RUN mkdir -p /opt/prometheus/conf/mesos-groups
 RUN mkdir -p /opt/prometheus/conf/rules
@@ -19,7 +19,7 @@ RUN tar xvzf prometheus-${PROM_VERSION}.linux-amd64.tar.gz
 RUN cp prometheus-${PROM_VERSION}.linux-amd64/prometheus /go/bin
 RUN cp prometheus-${PROM_VERSION}.linux-amd64/promtool /go/bin
 RUN cp -r prometheus-${PROM_VERSION}.linux-amd64/consoles /opt/prometheus/conf/consoles
-RUN cp -r prometheus-${PROM_VERSION}.linux-amd64/console_libraries /opt/prometheus/conf/consoles/libs
+RUN cp -r prometheus-${PROM_VERSION}.linux-amd64/console_libraries /opt/prometheus/conf/console_libraries
 RUN tar xvzf alertmanager-${AM_VERSION}.linux-amd64.tar.gz
 RUN cp alertmanager-${AM_VERSION}.linux-amd64/alertmanager /go/bin
 RUN rm prometheus-${PROM_VERSION}.linux-amd64.tar.gz
