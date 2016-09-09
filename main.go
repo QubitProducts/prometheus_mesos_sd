@@ -36,8 +36,8 @@ var (
 	mfile = flag.String("file.master", "mesos-master.json", "File to write mesos-master info to.")
 	sfile = flag.String("file.slaves", "mesos-slaves.json", "File to write mesos-slaves info to.")
 
-	cvsrPort = flag.Int("cadvisor.port", 4194, "Port for cadvisor on the nodes")
-	ndxpPort = flag.Int("nodeexporter.port", 9100, "Port for node_exporter on the nodes")
+	cvsrPort = flag.Int("cadvisor.port", 4194, "Port for cadvisor on the nodes, 0 to disable")
+	ndxpPort = flag.Int("nodeexporter.port", 9100, "Port for node_exporter on the nodes, 0 to disable")
 )
 
 var cn string
