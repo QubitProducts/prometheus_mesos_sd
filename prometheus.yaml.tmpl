@@ -24,15 +24,10 @@ scrape_configs:
     - source_labels: ['__meta_marathon_app_label_promexclude']
       regex:         '(.+)'
       action:        drop
-
     - source_labels: ['__meta_marathon_app']
       regex:         '/?(.*)'
       replacement:   '${1}'
       target_label:  'job'
-    - source_labels: ['__meta_marathon_image']
-      regex:         '(.*)'
-      replacement:   '${1}'
-      target_label:  'docker_image'
     - source_labels: ['__meta_marathon_task']
       regex:         '(.*)'
       replacement:   '${1}'
@@ -44,12 +39,15 @@ scrape_configs:
     file_sd_configs:
       - files: ['/opt/prometheus/conf/mesos-groups/*.json']
     metric_relabel_configs:
+    - source_labels: ['__name__'] # cardinality is too higha, historical don't get cleaned up
+      regex:         'mesos_slave_task_state_time'
+      action:        drop
     - source_labels: ['id']
-      regex:         '(.*)'
+      regex:         '(.+)'
       replacement:   '${1}'
       target_label:  'mesos_task_id'
     - source_labels: ['id']
-      regex:         '(.*)'
+      regex:         '(.+)'
       replacement:   ''
       target_label:  'id'
     - source_labels: ['framework_id']
