@@ -32,6 +32,14 @@ scrape_configs:
       regex:         '(.*)'
       replacement:   '${1}'
       target_label:  'mesos_task_id'
+    - source_labels: ['__meta_marathon_app_label_prometheus_scheme']
+      regex:         '(.+)'
+      replacement:   '${1}'
+      target_label:  '__scheme__'
+    - source_labels: ['__meta_marathon_app_label_prometheus_path']
+      regex:         '(.+)'
+      replacement:   '${1}'
+      target_label:  '__metrics_path__'
     - action:        labelmap
       regex:         '__meta_marathon_app_label_(.+)'
 
