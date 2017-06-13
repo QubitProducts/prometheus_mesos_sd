@@ -9,11 +9,16 @@ if [ -z "$CLUSTER" ]; then
   CLUSTER="default"
 fi
 
+if [ -z "$ENVIRONMENT" ]; then
+  ENVIRONMENT=""
+fi
+
 if [ ! -z "$MESOS_STORAGE" -a ! -z "$MESOS_SANDBOX" ]; then
   PROMFLAGS="$PROMFLAGS -storage.local.path	$MESOS_SANDBOX/$MESOS_STORAGE"
 fi
 
-cat $PROMCONF/prometheus.yaml.tmpl | sed -e "s#MARATHON_URL#${MARATHON_URL}#g;s#CLUSTER#${CLUSTER}#g" > $PROMCONF/prometheus.yaml
+cat $PROMCONF/prometheus.yaml.tmpl | sed -e
+"s#MARATHON_URL#${MARATHON_URL}#g;s#CLUSTER#${CLUSTER}#g;s#ENVIRONMENT#${ENVIRONMENT}#g" > $PROMCONF/prometheus.yaml
 if [ -d $PROMCONF/conf.d ]; then
   for F in $(ls $PROMCONF/conf.d/*.yaml); do
     cat $F >> $PROMCONF/prometheus.yaml
