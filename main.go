@@ -141,8 +141,8 @@ func writeConfig(fn, jobn string, targets []target) {
 	for _, t := range targets {
 		// Add the specific mesos service target
 		attrs := map[string]string{
-			"job":                jobn,
-			"mesos_cluster_name": cn,
+			"job":     jobn,
+			"cluster": cn,
 		}
 		for k, v := range t.remAttrs {
 			if s, ok := v.(string); ok {
