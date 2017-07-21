@@ -34,6 +34,8 @@ scrape_configs:
     - source_labels: ['__meta_marathon_app_label_promexclude']
       regex:         '(.+)'
       action:        drop
+    - replacement:   'CLUSTER'
+      target_label:  'cluster'
     - source_labels: ['__meta_marathon_app']
       regex:         '/?(.*)'
       replacement:   '${1}'
